@@ -20,6 +20,22 @@ A command-line quiz application where users can:
 - **MySQL**
 - **bcrypt** for password hashing
 
+## ⚙️ Configuration
+
+Before running the app, configure your database settings.
+
+### 1. Set your database credentials
+
+Open `main.py` and update the following section with your MySQL credentials:
+
+```python
+DB_CONF = {
+    'host': 'localhost',
+    'user': 'root', # 🔒 Replace with your actual username
+    'password': 'your_password',  # 🔒 Replace with your actual MySQL password
+    'database': 'QK' # 🔒 Replace with your actual database name
+}
+```
 ## 📦 Setup
 
 ```bash
