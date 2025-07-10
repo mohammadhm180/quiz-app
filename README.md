@@ -22,6 +22,20 @@ A command-line quiz application where users can:
 
 ## ⚙️ Configuration
 
+in terminal run this command to create a the database
+
+```bash
+mysql -u root -p -e "CREATE DATABASE QK;"
+```
+Run the following commands to set up your tables and triggers:
+
+```bash
+mysql -u root -p QK < schema.sql
+mysql -u root -p QK < triggers.sql
+mysql -u root -p QK < indexes.sql
+```
+
+
 Before running the app, configure your database settings.
 
 ### 1. Set your database credentials
