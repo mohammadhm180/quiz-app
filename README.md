@@ -23,7 +23,7 @@ A command-line quiz application where users can:
 ## 📦 Setup
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/quiz-app.git
+git clone https://github.com/mohammadhm180/quiz-app.git
 cd quiz-app
 pip install -r requirements.txt
 
