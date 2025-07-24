@@ -1,4 +1,4 @@
-from datetime import time, datetime
+from datetime import time, datetime, timedelta
 
 import mysql.connector
 import bcrypt
@@ -394,6 +394,181 @@ class QuizApp:
             print("❌ User not found.\n")
 
 
+    def send_message(self):
+        """Send a message (or reply) to another user."""
+        if not self.user:
+            print("❌ Please login first.\n")
+            return
+
+        to_username = input("To (username): ").strip()
+        content     = input("Message: ").strip()
+
+        # find recipient
+        self.cursor.execute(
+            "SELECT UserID FROM Users WHERE Username = %s AND Status = 'active'",
+            (to_username,)
+        )
+        row = self.cursor.fetchone()
+        if not row:
+            print("❌ Recipient not found or not active.\n")
+            return
+        rid = row['UserID']
+
+        # insert
+        self.cursor.execute(
+            "INSERT INTO Messages (SenderID, ReceiverID, Content) VALUES (%s, %s, %s)",
+            (self.user['UserID'], rid, content)
+        )
+        self.conn.commit()
+        print("✅ Message sent.\n")
+
+    def receive_messages(self):
+        """View your inbox, optionally filtering by sender."""
+        if not self.user:
+            print("❌ Please login first.\n")
+            return
+
+        sender = input("From (leave blank for all): ").strip() or None
+        params = [self.user['UserID']]
+        sql = """
+            SELECT M.MessageID, U1.Username AS Sender, M.Content, M.CreatedAt
+            FROM Messages M
+            JOIN Users U1 ON M.SenderID = U1.UserID
+            WHERE M.ReceiverID = %s AND M.IsDeleted = 0
+        """
+        if sender:
+            sql += " AND U1.Username = %s"
+            params.append(sender)
+
+        sql += " ORDER BY M.CreatedAt DESC"
+        self.cursor.execute(sql, tuple(params))
+        msgs = self.cursor.fetchall()
+
+        if not msgs:
+            print("\n📭 No messages found.\n")
+            return
+
+        print("\n=== Inbox ===")
+        for idx, m in enumerate(msgs, start=1):
+            ts = m['CreatedAt'].strftime("%Y-%m-%d %H:%M")
+            print(f"{idx}. From {m['Sender']} @ {ts}")
+            print(f"   » {m['Content']}\n")
+
+    def _list_sent_messages(self):
+        """Helper: fetch and return your last 10 sent, undeleted messages."""
+        self.cursor.execute(
+            """
+            SELECT MessageID, U2.Username AS Receiver, Content, M.CreatedAt
+            FROM Messages M
+            JOIN Users U2 ON M.ReceiverID = U2.UserID
+            WHERE M.SenderID = %s AND M.IsDeleted = 0
+            ORDER BY M.CreatedAt DESC
+            LIMIT 10
+            """,
+            (self.user['UserID'],)
+        )
+        return self.cursor.fetchall()
+
+    def edit_message(self):
+        """Show your recent sent messages, pick one to edit."""
+        if not self.user:
+            print("❌ Please login first.\n")
+            return
+
+        msgs = self._list_sent_messages()
+        if not msgs:
+            print("❌ You have no messages to edit.\n")
+            return
+
+        print("\nSelect a message to edit:")
+        for i, m in enumerate(msgs, start=1):
+            ts = m['CreatedAt'].strftime("%Y-%m-%d %H:%M")
+            print(f"{i}. To {m['Receiver']} @ {ts}: {m['Content'][:30]}…")
+        choice = int(input("Enter number: ").strip())
+        msg = msgs[choice-1]
+
+        new_text = input("New content: ").strip()
+        self.cursor.execute(
+            "UPDATE Messages SET Content=%s, EditedAt=NOW() WHERE MessageID=%s",
+            (new_text, msg['MessageID'])
+        )
+        self.conn.commit()
+        print("✅ Message updated.\n")
+
+    def delete_message(self):
+        """Show your recent sent messages, pick one to delete (soft)."""
+        if not self.user:
+            print("❌ Please login first.\n")
+            return
+
+        msgs = self._list_sent_messages()
+        if not msgs:
+            print("❌ You have no messages to delete.\n")
+            return
+
+        print("\nSelect a message to delete:")
+        for i, m in enumerate(msgs, start=1):
+            ts = m['CreatedAt'].strftime("%Y-%m-%d %H:%M")
+            print(f"{i}. To {m['Receiver']} @ {ts}: {m['Content'][:30]}…")
+        choice = int(input("Enter number: ").strip())
+        msg = msgs[choice-1]
+
+        self.cursor.execute(
+            "UPDATE Messages SET IsDeleted=1 WHERE MessageID=%s",
+            (msg['MessageID'],)
+        )
+        self.conn.commit()
+        print("✅ Message deleted.\n")
+
+    def reply_message(self):
+        """Show your inbox, pick one to reply to."""
+        if not self.user:
+            print("❌ Please login first.\n")
+            return
+
+        # reuse receive logic but return list
+        self.cursor.execute(
+            """
+            SELECT M.MessageID, U1.Username AS Sender, Content, M.CreatedAt
+            FROM Messages M
+            JOIN Users U1 ON M.SenderID = U1.UserID
+            WHERE M.ReceiverID = %s AND M.IsDeleted = 0
+            ORDER BY M.CreatedAt DESC
+            LIMIT 10
+            """,
+            (self.user['UserID'],)
+        )
+        msgs = self.cursor.fetchall()
+        if not msgs:
+            print("❌ No messages to reply to.\n")
+            return
+
+        print("\nSelect a message to reply:")
+        for i, m in enumerate(msgs, start=1):
+            ts = m['CreatedAt'].strftime("%Y-%m-%d %H:%M")
+            print(f"{i}. From {m['Sender']} @ {ts}: {m['Content'][:30]}…")
+        choice = int(input("Enter number: ").strip())
+        orig = msgs[choice-1]
+
+        reply = input("Your reply: ").strip()
+
+        # determine target: original sender
+        self.cursor.execute(
+            "SELECT UserID FROM Users WHERE Username=%s",
+            (orig['Sender'],)
+        )
+        rid = self.cursor.fetchone()['UserID']
+
+        self.cursor.execute(
+            """
+            INSERT INTO Messages (SenderID, ReceiverID, ParentMsgID, Content)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (self.user['UserID'], rid, orig['MessageID'], reply)
+        )
+        self.conn.commit()
+        print("✅ Reply sent.\n")
+
 def main_menu():
     app = QuizApp()
     options = {
@@ -407,6 +582,11 @@ def main_menu():
         '8': ('Match History', app.match_history),
         '9': ('Top Players by Win Rate', app.top_players_by_winrate),
         '10': ('Most Played Categories', app.most_played_categories),
+        '11': ('Send Message',app.send_message),
+        '12': ('View Inbox',app.receive_messages),
+        '13': ('Edit Message',app.edit_message),
+        '14': ('Delete Message', app.delete_message),
+        '15': ('Reply to Message',app.reply_message),
         '0': ('Exit', lambda: sys.exit(0)),
     }
 
