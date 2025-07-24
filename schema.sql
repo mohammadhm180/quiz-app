@@ -88,5 +88,18 @@ CREATE TABLE LeaderboardScores (
     FOREIGN KEY (AdminID) REFERENCES Users(UserID)
 );
 
+CREATE TABLE Messages (
+    MessageID      INT AUTO_INCREMENT PRIMARY KEY,
+    SenderID       INT NOT NULL,
+    ReceiverID     INT NOT NULL,
+    ParentMsgID    INT       NULL,
+    Content        TEXT      NOT NULL,
+    CreatedAt      DATETIME  NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    EditedAt       DATETIME  NULL,
+    IsDeleted      TINYINT(1) NOT NULL DEFAULT 0,
+    FOREIGN KEY (SenderID)   REFERENCES Users(UserID),
+    FOREIGN KEY (ReceiverID) REFERENCES Users(UserID),
+    FOREIGN KEY (ParentMsgID) REFERENCES Messages(MessageID)
+);
 
 
